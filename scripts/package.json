@@ -1,0 +1,25 @@
+{
+  "name": "v2v-seed-data",
+  "version": "1.0.0",
+  "description": "Seed data scripts for V2V Bike Parts platform",
+  "type": "module",
+  "scripts": {
+    "seed": "node seedData.js",
+    "seed:users": "node seedUsers.js",
+    "seed:categories": "node seedCategories.js",
+    "seed:bikes": "node seedBikeModels.js",
+    "seed:products": "node seedProducts.js",
+    "seed:orders": "node seedOrders.js",
+    "seed:reviews": "node seedReviews.js",
+    "clean": "node cleanData.js",
+    "reset": "npm run clean && npm run seed"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.9.0",
+    "@faker-js/faker": "^8.0.2",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.3.3"
+  }
+}

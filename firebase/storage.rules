@@ -1,0 +1,119 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isVendor() {
+      return isAuthenticated() && 
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'vendor';
+    }
+    
+    function isValidImageFile() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    function isValidFileSize() {
+      return request.resource.size < 5 * 1024 * 1024; // 5MB limit
+    }
+
+    // User profile images
+    match /users/{userId}/profile/{fileName} {
+      allow read: if true; // Profile images are public
+      allow write: if isOwner(userId) && 
+        isValidImageFile() && 
+        isValidFileSize();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Product images
+    match /products/{productId}/{fileName} {
+      allow read: if true; // Product images are public
+      allow write: if isAuthenticated() && 
+        isValidImageFile() && 
+        isValidFileSize() &&
+        // Check if user owns the product or is admin
+        (isAdmin() || 
+         firestore.get(/databases/(default)/documents/products/$(productId)).data.vendorId == request.auth.uid);
+      allow delete: if isAuthenticated() && 
+        (isAdmin() || 
+         firestore.get(/databases/(default)/documents/products/$(productId)).data.vendorId == request.auth.uid);
+    }
+
+    // Review images
+    match /reviews/{reviewId}/{fileName} {
+      allow read: if true; // Review images are public
+      allow write: if isAuthenticated() && 
+        isValidImageFile() && 
+        isValidFileSize() &&
+        // Check if user owns the review
+        firestore.get(/databases/(default)/documents/reviews/$(reviewId)).data.buyerId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+        (isAdmin() || 
+         firestore.get(/databases/(default)/documents/reviews/$(reviewId)).data.buyerId == request.auth.uid);
+    }
+
+    // Message attachments
+    match /messages/{messageId}/{fileName} {
+      allow read: if isAuthenticated() && 
+        // Check if user is participant in the conversation
+        (firestore.get(/databases/(default)/documents/messages/$(messageId)).data.senderId == request.auth.uid ||
+         firestore.get(/databases/(default)/documents/messages/$(messageId)).data.receiverId == request.auth.uid ||
+         isAdmin());
+      allow write: if isAuthenticated() && 
+        isValidFileSize() &&
+        // Check if user is sending the message
+        firestore.get(/databases/(default)/documents/messages/$(messageId)).data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+        (isAdmin() || 
+         firestore.get(/databases/(default)/documents/messages/$(messageId)).data.senderId == request.auth.uid);
+    }
+
+    // Category images (admin only)
+    match /categories/{categoryId}/{fileName} {
+      allow read: if true; // Category images are public
+      allow write: if isAdmin() && 
+        isValidImageFile() && 
+        isValidFileSize();
+      allow delete: if isAdmin();
+    }
+
+    // Temporary uploads (for processing)
+    match /temp/{userId}/{fileName} {
+      allow read, write: if isOwner(userId) && 
+        isValidFileSize();
+      allow delete: if isOwner(userId) || isAdmin();
+      
+      // Auto-delete temp files after 1 hour
+      allow delete: if resource.timeCreated < timestamp.date().addHours(1);
+    }
+
+    // System assets (admin only)
+    match /system/{fileName} {
+      allow read: if true; // System assets are public
+      allow write: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Backup files (admin only)
+    match /backups/{document=**} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default deny rule
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
